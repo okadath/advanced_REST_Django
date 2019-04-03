@@ -148,10 +148,116 @@ class PostList(generics.ListCreateAPIView):
 
 class PostDetail(generics.RetrieveUpdateDestroyAPIView):
 	queryset=Post.objects.all()
-	serializer_class=
-	```
+	serializer_class=PostSerializer
+```
+agregar al `blog_project/urls.py`:
+
+```python
+    path('api-auth/',include('rest_framework.urls')),
+```
+y esto nos permite logearnos desd eel restdjangofw
+
+pero cualquier usuario aun puede editar info privada por que asi lo configuramos
+```python
+REST_FRAMEWORK={
+	'DEFAULT_PERMISSION_CLASSES':[
+		'rest_framework.permissions.AllowAny',
+	]
+}
+```
+
+queremos restingirlo, se puede hacer a nivel de este proyecto, nivel vistas o nivel objeto
+como solo tenemos dos vistas lo ahremos primero a nivel vista
+### view_level
+editar `posts/views.py` y agregar los `permission_clases`:
+```python
+from rest_framework import generics, permissions
+from .models import Post
+from .serializers import PostSerializer
+
+class PostList(generics.ListAPIView):
+	permission_classes=(permissions.IsAuthenticated,)
+	queryset=Post.objects.all()
+	serializer_class=PostSerializer
+
+class PostDetail(generics.RetrieveUpdateDestroyAPIView):
+	permission_classes=(permissions.IsAuthenticated,)
+	queryset=Post.objects.all()
+	serializer_class=PostSerializer
+```
+peeero si el proyecto crece no conviene hacerlo por vistas
+
+### project_level
+REST fw tiene muchas configuraciones d epermisos
++ AllowAny: cualquiera accede
++ IsAuthenticated: solo autenticados
++ IsAdminUser:solo admin/superusers
++ IsAuthenticatedOrReadOnly:usuarios noauth pueden ver pero solo auth pueden hacer CRUD
+
+entonces probaremos el IsAuthenticated:
+```python
+REST_FRAMEWORK={
+	'DEFAULT_PERMISSION_CLASSES':[
+		'rest_framework.permissions.IsAuthenticated',
+	]
+}
+```
+y dejamos el `posts/views.py` como estaba originalmente
+```python
+from rest_framework import generics
+from .models import Post
+from .serializers import PostSerializer
+
+class PostList(generics.ListAPIView):
+	queryset=Post.objects.all()
+	serializer_class=PostSerializer
+
+class PostDetail(generics.RetrieveUpdateDestroyAPIView):
+	queryset=Post.objects.all()
+	serializer_class=PostSerializer
+```
+
+### custom permissions(nivel objeto)
+queremos que solo el autor de un blog sea quien hace update/delete si no solo lo lee
+los superusers editaran todo pero los normales solo los suyos
+
+internamente RESTFW posee una clase BasePermission en el cual le sobreescribiremos el metodo has_object_permission
+
+crear `posts/permissions.py`:
+
+```python
+from rest_framework import permissions
+
+class IsAuthorOrReadOnly(permissions.BasePermission):
+
+  def has_object_permission(self, request, view, obj):
+    # Read-only permissions are allowed for any request
+    if request.method in permissions.SAFE_METHODS:
+      return True
+    return obj.author == request.user
+```
+
+debemos importarlo desde el `posts/views.py`:
+```python
+from rest_framework import generics
+
+from .models import Post
+from .permissions import IsAuthorOrReadOnly
+from .serializers import PostSerializer
 
 
+class PostList(generics.ListCreateAPIView):
+  queryset = Post.objects.all()
+  serializer_class = PostSerializer
+
+
+class PostDetail(generics.RetrieveUpdateDestroyAPIView):
+  permission_classes = (IsAuthorOrReadOnly,)
+  queryset = Post.objects.all()
+  serializer_class = PostSerializer
+
+```
+este permiso solo devuelve un valor, para filtrado nivel objeto en listas para colecciones o instancias, se debe hacer un overriding the initial queryset
 
 
 
