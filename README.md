@@ -168,7 +168,7 @@ REST_FRAMEWORK={
 
 queremos restingirlo, se puede hacer a nivel de este proyecto, nivel vistas o nivel objeto
 como solo tenemos dos vistas lo ahremos primero a nivel vista
-### view_level
+#### View_level
 editar `posts/views.py` y agregar los `permission_clases`:
 ```python
 from rest_framework import generics, permissions
@@ -187,7 +187,7 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
 ```
 peeero si el proyecto crece no conviene hacerlo por vistas
 
-### project_level
+#### Project_level
 REST fw tiene muchas configuraciones d epermisos
 + AllowAny: cualquiera accede
 + IsAuthenticated: solo autenticados
@@ -217,7 +217,7 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
 	serializer_class=PostSerializer
 ```
 
-### custom permissions(nivel objeto)
+#### Custom permissions(nivel objeto)
 queremos que solo el autor de un blog sea quien hace update/delete si no solo lo lee
 los superusers editaran todo pero los normales solo los suyos
 
@@ -258,6 +258,229 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
 
 ```
 este permiso solo devuelve un valor, para filtrado nivel objeto en listas para colecciones o instancias, se debe hacer un overriding the initial queryset
+
+
+### User auth
+lo anterior era autorizacion, ahora haremos autenticacion(sign up log in/out)
+django normalmente usa un pattern session-bassed cookie
+
+en las SPI le pasamos un identificador por request, RESTFW permite 4 tipos de....
+y ademas muchos ofrecen json webtokens JWT
+
+#### Basic Auth
+el cliente es forzado a enviar sus credenciales
+```
+cliente		server
+	----->
+	get /http
+
+	<-----
+	http 401 no auth
+	wwwauth:basic
+
+	----->
+	get http/header:auth: basic 123qweas
+
+	<-----
+	http 200 OK
+```
+
+las credenciales enviadas son una version unencrypted base64 encoded de username:password
+es ineficiente por que se pasa esto sin cifrar y se tiene que verificar siempre si est alogeado o no, solo usarlo con https
+
+#### Session auth
+
+django usa una mezcla de sessions/cookies
+el cliente se autentica y recibe un sessionID del server que se almacena en una cookie, el sessionID es pasado como cbecera en las httprequest
+
+
+esto es stateful por que se mandiene almacenado en ambos, server/cliente
+ el defecto es que esto depende del navegador y las cookies no trabajan en multiples dominios, como apps
+ cuando hay muchos servers es dificil manejar la autenticacion de un solo cliente actualizada
+ esto no sirve con APIs de multiple frontend
+
+#### Token auth
+es el mas comun por las SPA, es stateless, el cliente manda sus credenciales al server, este enera un token que se almacena en local o como cookie
+
+este token se pasa como header en cada request y el server lo usa para verificar si esta autenticado, pero no lo almacena, solo verifica si es valido o no
+las cookies estan creadas para leer info del lado del server y se envian en cada http request
+el almacenamiento local esta dise;ado para informacion del cliente, almacena mas y no es mandada por default en cada httprequest
+
+ambos tokens son vulnerables al XSSattack
+por ello las cookies deben ir con las banderas `httpOnly` y `Secure`
+```
+cliente		server
+	----->
+	get /http
+
+	<-----
+	http 401 no auth
+	wwwauth:token
+
+	----->
+	get http/header:auth: token 123qweas
+
+	<-----
+	http 200 OK
+```
+como se almacenan en el cliente escalar los servers sin actualizar la sesion es facil y se pueden usar muchos frontends
+el mismo token representa el usuario en web o en mobil
+problema: pueden crecer mucho, ya que llevan toda la info del cliente, no solo el id
+
+
+las implementaciones varian, pero RESTFW posee un TokenAuthentication, que no posee expiracion(hay que implementarla)
+solo genera un token por usuario(web/mobil usan el mismo)por lo cual puede haber problemas de mantenimiento y actualizacion de 2 conjuntos de informacion de un cliente
+
+JWTson versiones nuevas de tokens que se agregan por paquetes de terceros como auth0
+poseen token expiration y pueden generar unique tokens clients
+
+**Default auth***
+
+actualizar el `settings.py`:
+```python
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES':[
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication'
+    ],
+}
+```
+usamos 2 metodos, por que las sesiones son usadas para la API de navegador(y su log in/out)
+Basic es para pasar el sessionID en als cabeceras para la API misma
+
+
+**Implementar Token auth**
+
+actualizar el `settings.py`:
+```python
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES':[
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication'
+    ],
+}
+```
+aun necesitamos el session para testing
+necesitamos agregar la app:
+```python
+INSTALLED_APPS = [
+		...
+    'posts',
+    'rest_framework',
+    'rest_framework.authtoken',
+]
+```
+hacer migraciones y correr el server, si vamos al admin y vemos en tokens no hay ninguno
+estos solo se generan despues de un login(aunque antes hubiese usuarios!!!)
+
+para los logins necesitamos crear endpoints 
+podriamos crear una app users para esto y agregar sus urls,views y serializers, pero aqui no queremos errores, para esto ya hay librerias
+como django-rest-auth combinada con django-allauth
+
+```
+pip install django-rest-auth
+```
+```python
+INSTALLED_APPS = [
+		...
+    'posts',
+    'rest_framework',
+    'rest_framework.authtoken',
+    'rest_auth',
+]
+```
+actualizamos el `blog_project/urls.py` con el paquete rest_auth, sus urls las pondremos en `api/v1/rest_auth`, agregando:
+```python
+    path('api/v1/rest-auth/',include('rest_auth.urls'))
+```
+y con esto ya tenemos nuevos endpoints para login
+```
+http://127.0.0.1:8000/api/v1/rest-auth/login/
+http://127.0.0.1:8000/api/v1/rest-auth/logout/
+http://127.0.0.1:8000/api/v1/rest-auth/password/reset
+http://127.0.0.1:8000/api/v1/rest-auth/password/reset/confirm/
+```
+ahora implementaremos el registro de usuarios (signup)
+ni django ni djangoRSTFW lo traen por default lo cual puede ser riesgoso
+usaremos django-allauth que tambien provee autenticacion via face twitter google ,etc
+si agregamos rest_auth.registration de django-rest-auth tendremos endpoints de registro de usuario
+
+```
+ pip install django-allauth
+```
+ y editaremos el `settings.py` para agregar toda la configuracion necesaria:
+```python
+INSTALLED_APPS = [
+		...
+    'posts',
+    'rest_framework',
+    'rest_framework.authtoken',
+    'rest_auth',
+    #nuevas
+    'django.contrib.sites',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'rest_auth.registration',
+    
+]
+...
+
+EMAIL_BACKEND='django.core.mail.backends.console.EmailBackend'
+SITE_ID=1
+
+```
+es necesario configurar el email para que el usuario confirme su nueva cuenta
+
+pero creo que solo los desplegaremos :/
+
+checar pagina 122,140, en django for beginners muestra como mandar correos
+
+Site_id es parte de django, nos permite tener multiples webs en el mismo proyecto, aqui solo tendremos uno que trabaja con allauth
+
+migramos y agregamos nuevas urls en `blog_project/urls.py`:
+```python
+  path('api/v1/rest-auth/registration',include('rest_auth.registration.urls'))
+```
+corremos el servidor y abrimos
+```
+http://127.0.0.1:8000/api/v1/rest-auth/registration/
+```
+si registramos un usuario nos manda por consola un mensaje de registro y en pantalla muestra el nuevo token, desde la consola de admins ya hay tokens
+
+una vez logeados con el neuvo usuario nos devuelve el token
+este debe ser manejado y almacenado como cookie o en local
+
+ya lo logea despues de mandar el correo...pero no verifica el correo, hay que checar en allauth como hacerlo, sospecho que debe de ser desde el email enn el mundo real :/
+
+para el paso de urls a path :
+
+https://consideratecode.com/2018/05/02/django-2-0-url-to-path-cheatsheet/
+
+https://django.cowhite.com/blog/working-with-url-get-post-parameters-in-django/
+
+literal para ahcer la autenticacion y el logeo solo editamos el settings y el views :O!
+### viewsets y routing
+
+un viewset remplasa muchas vistas relacionadas
+
+user endpoints:
+
+ya tenemos un modelo de usuarios
+solo lo enlazaremos con endpoints:
++ agregar el serializer al modelo de clases
++ nuevas vistas por cada endpoint
++ nuevas rutas de urls por cada endpoint
+
+
+
+
 
 
 
