@@ -582,4 +582,72 @@ class UserViewSet(viewsets.ModelViewSet):
 	serializer_class=UserSerializer
 ```
 
+## Docs
+un schema es un documento legible por la maquina que lista los endpoints
+la documentacion es texto agegado a el schema para los humanos
+
+usaremos CoreAPI para generar el schema, es independiente del formato 
+```python
+pip install coreapi pyyaml
+```
+y agregamos a `blog_project/urls.py`
+
+```python
+...
+from rest_framework.schemas import get_schema_view
+from rest_framework.documentation import include_docs_urls
+API_TITLE="Blog API"
+API_DESCRIPTION='A web API for create blogs'
+schema_view=get_schema_view(title=API_TITLE)
+
+urlpatterns = [
+ 		...
+    path('schema/',schema_view),
+    path('docs/',include_docs_urls(title='Blog API', description=API_DESCRIPTION)),
+    ]
+```
+si corremos el server la url `localhost/schema`
+ya nos muestra informacion, y al oprimir el boton interact se puede ver el resultado
+
+tambien esta la libreria django-rest-swagger
+```python
+pip install django-rest-swagger
+```
+editamos el settings.py:
+```python
+INSTALLED_APPS = [
+...
+'rest_framework_swagger',
+]
+```
+y editamos el `blog_project/urls.py`:
+```python
+...
+from rest_framework_swagger.views import get_swagger_view
+
+API_TITLE="Blog API"
+API_DESCRIPTION='A web API for create blogs'
+schema_view=get_swagger_view(title=API_TITLE)
+
+urlpatterns = [
+		...
+    #path('schema/',schema_view),
+    path('swagger-docs/',schema_view),
+    path('docs/',include_docs_urls(title='Blog API', description=API_DESCRIPTION)),
+]
+
+```
+y vemos en la vista `localhost/swagger-docs/` la nueva documentacion
+
+
+
+
+
+
+
+
+
+
+
+
 

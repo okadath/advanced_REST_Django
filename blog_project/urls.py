@@ -16,6 +16,13 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include, re_path
 from allauth.account.views import confirm_email
+from rest_framework.schemas import get_schema_view
+from rest_framework.documentation import include_docs_urls
+from rest_framework_swagger.views import get_swagger_view
+
+API_TITLE="Blog API"
+API_DESCRIPTION='A web API for create blogs'
+schema_view=get_swagger_view(title=API_TITLE)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -26,4 +33,7 @@ urlpatterns = [
         name="account_confirm_email"),
     path('api/v1/rest-auth/registration/',include('rest_auth.registration.urls')),
     #re_path(r'^api/v1/rest-auth/registration/account-confirm-email/(?P<key>[-:\w]+)/$', confirm_email),
+    #path('schema/',schema_view),
+    path('swagger-docs/',schema_view),
+    path('docs/',include_docs_urls(title='Blog API', description=API_DESCRIPTION)),
 ]
