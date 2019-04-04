@@ -22,6 +22,8 @@ urlpatterns = [
     path('api/v1/',include('posts.urls')),
     path('api-auth/',include('rest_framework.urls')),
     path('api/v1/rest-auth/',include('rest_auth.urls')),
+    re_path(r"^api/v1/rest-auth/registration/account-confirm-email/(?P<key>[\s\d\w().+-_',:&]+)/$", confirm_email,
+        name="account_confirm_email"),
     path('api/v1/rest-auth/registration/',include('rest_auth.registration.urls')),
     #re_path(r'^api/v1/rest-auth/registration/account-confirm-email/(?P<key>[-:\w]+)/$', confirm_email),
 ]

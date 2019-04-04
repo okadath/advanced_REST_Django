@@ -440,7 +440,7 @@ es necesario configurar el email para que el usuario confirme su nueva cuenta
 
 pero creo que solo los desplegaremos :/
 
-checar pagina 122,140, en django for beginners muestra como mandar correos
+checar pagina 122,140,152, en django for beginners muestra como mandar correos
 
 Site_id es parte de django, nos permite tener multiples webs en el mismo proyecto, aqui solo tendremos uno que trabaja con allauth
 
@@ -478,14 +478,108 @@ solo lo enlazaremos con endpoints:
 + nuevas vistas por cada endpoint
 + nuevas rutas de urls por cada endpoint
 
+agregar a `posts/serializers.py`:
+
+```python
+from django.contrib.auth import get_user_model
+
+class UserSerializer(serializers.ModelSerializer):
+
+	class Meta:
+		model=get_user_model()
+		fields=('id','username')
+```
+crearemos una clase UserList qe despliega todos y UserDetails que solo muestra uno
+por lo cual solo usaremos ListAPIView y RetrieveAPIView
+ en `posts/views.py`:
+ ```python
+from django.contrib.auth import get_user_model
+from .serializers import UserSerializer
+
+class UserList(generics.ListAPIView):
+	queryset=get_user_model().objects.all()
+	serializer_class=UserSerializer
+
+class UserDetail(generics.RetrieveAPIView):
+	queryset=get_user_model().objects.all()
+	serializer_class=UserSerializer
+
+```
+
+en el `posts/urls.py` importaremos nuestras nuevas clases:
+```python
+from django.urls import path
+from .views import UserList,UserDetail,PostList, PostDetail
+
+urlpatterns=[
+	path('users/',UserList.as_view()),
+	path('users/<int:pk>/',UserDetail.as_view()),
+	path('',PostList.as_view()),
+	path('<int:pk>/',PostDetail.as_view()),
+]
+```
+viewsets:
+combina la logica de multiples clases en una sola clase
+problemas:se pierde legibilidad para developers que no los manejan
+
+editamos `el posts/views.py`:
+```python
+from django.contrib.auth import get_user_model
+from rest_framework import viewsets
+
+from .models import Post
+from .permissions import IsAuthorOrReadOnly
+from .serializers import PostSerializer,UserSerializer
+
+class PostViewSet(viewsets.ModelViewSet):
+	permission_classes = (IsAuthorOrReadOnly,)
+	queryset=Post.objects.all()
+	serializer_class=PostSerializer
+
+class UserViewSet(viewsets.ModelViewSet):
+	permission_classes = (IsAuthorOrReadOnly,)
+	queryset=get_user_model().objects.all()
+	serializer_class=UserSerializer
+```
+asi no repetimos vistas como arriba :D
+**Routers***
+sirven para condensar tambien las urls asi como los viewsets
+DRF posee 2:SimpleRouter y DefaultRouter
+usaremos el simple pero es posible crear routers customizados 
+en `posts/urls.py`reescribimos casi todo:
+
+```python
+from django.urls import path
+from .views import UserViewSet,PostViewSet
+from rest_framework.routers import SimpleRouter
+
+router=SimpleRouter()
+router.register('users',UserViewSet,base_name='users')
+router.register('',PostViewSet,base_name='posts')
+urlpatterns=router.urls
+```
+aqui registramos cada viewset al router
+usar viewsts y routers cuando la app crezca
 
 
+http://127.0.0.1:8000/api/v1/rest-auth/registration/account-confirm-email/Mw:1hBohc:TMS_GlbCDSATrHd5pwGrZC9_s9o/
 
 
-
-
-
-
-
+para que solo el mismo usuario edite su nombre yo agregue a permissions
+```python
+class IsUserOrReadOnly(permissions.BasePermission):
+	def has_object_permission(self, request, view, obj):
+		if request.method in permissions.SAFE_METHODS:
+			return True
+		print(obj)
+		return obj == request.user
+```
+y a `post/views.py`:
+```python
+class UserViewSet(viewsets.ModelViewSet):
+	permission_classes = (IsUserOrReadOnly,)
+	queryset=get_user_model().objects.all()
+	serializer_class=UserSerializer
+```
 
 
